@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fırat ❤️ Azra — Pixel Quest</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; background:#0b0f17; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 16px; position: relative; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-radius:14px;
+           background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.10); }
+    .title { font-weight: 900; letter-spacing:.3px; }
+    .hint { font-size: 12px; opacity:.85; margin-top:4px; }
+    .canvasWrap{ position: relative; }
+    canvas { width:100%; height:auto; display:block; margin-top:14px; border-radius:16px; border:1px solid rgba(255,255,255,.12); background:#0b0f17; }
+    .row { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:12px; opacity:.85;}
+    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.10); }
+    button { cursor:pointer; border:0; border-radius:12px; padding:10px 12px; background: rgba(255,255,255,.10); color:#fff; font-weight:900;
+             border:1px solid rgba(255,255,255,.12); }
+    button:hover { background: rgba(255,255,255,.14); }
+    #fsBtn{
+      position:absolute;
+      top: 74px;
+      right: 18px;
+      z-index: 5;
+      padding:10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.18);
+      backdrop-filter: blur(6px);
+    }
+    #fsBtn:hover{ background: rgba(0,0,0,.45); }
+    .isFS canvas{
+      margin-top: 0;
+      border-radius: 0;
+      border: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+    .isFS .top, .isFS .row { display:none; }
+    .isFS #fsBtn{ top: 16px; right: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap">
+    <div class="top">
+      <div>
+        <div class="title">Fırat ❤️ Azra — Pixel Quest</div>
+        <div class="hint">← → / A D • Zıpla: ↑ / W / Space • Koş: Shift • Ateş: X • Yeniden: R</div>
+      </div>
+      <button id="restart">Yeniden Başlat</button>
+    </div>
+
+    
+    <div class="canvasWrap" id="canvasWrap">
+      <button id="fsBtn" title="Tam ekran">⛶</button>
+      <canvas id="c" width="960" height="540"></canvas>
+      <div id="titleUI" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+        <div style="pointer-events:auto; text-align:center; padding:18px 20px; border-radius:18px;
+                    background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(8px);">
+          <div style="font-weight:900; font-size:28px; letter-spacing:1px; margin-bottom:6px;">AZRA'YI KURTARMAK</div>
+          <div style="opacity:.85; font-size:13px; margin-bottom:14px;">Fırat ❤️ Azra — Pixel Quest</div>
+          <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+            <button id="startBtn">START</button>
+            <button id="howBtn">HOW TO PLAY</button>
+            <button id="muteBtn">SOUND: ON</button>
+          </div>
+          <div id="howBox" style="display:none; margin-top:12px; font-size:12px; opacity:.9; line-height:1.35;">
+            ← → / A D: Yürü • ↑ / W / Space: Zıpla • Shift: Koş • X: Ateş • R: Yeniden<br/>
+            Çiçek: kutudan çıkar, al → ateş gücü. Kaplumbağa: bas → kabuk, tekmele → hepsini biç.
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="row">
+      <div class="pill" id="status">Chapter 1: Gökyüzü Tepeleri — Amaç: Bayrağa ulaş.</div>
+      <div class="pill">Çiçek: Soru kutusuna alttan vur → düşer, al → X ile ateş 🔥 • Kaplumbağa: üstüne bas → kabuk, tekmele → hepsini biç 🐢</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const wrap = document.getElementById("wrap");
+  const canvasWrap = document.getElementById("canvasWrap");
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+
+  const PW = 320, PH = 180, SCALE = 3;
+  const pcan = document.createElement("canvas");
+  pcan.width = PW; pcan.height = PH;
+  const pctx = pcan.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  pctx.imageSmoothingEnabled = false;
+
+  const statusEl = document.getElementById("status");
+  document.getElementById("restart").addEventListener("click", () => restart(true));
+
+  const fsBtn = document.getElementById("fsBtn");
+  fsBtn.addEventListener("click", async () => {
+    try{
+      if (!document.fullscreenElement){
+        await canvasWrap.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch(e){}
+  });
+  document.addEventListener("fullscreenchange", () => {
+    const isFS = !!document.fullscreenElement;
+    wrap.classList.toggle("isFS", isFS);
+    fsBtn.textContent = isFS ? "⤢" : "⛶";
+  });
+
+  const assets = {
+    tiles:  loadImg("assets/tiles.png"),
+    firat:  loadImg("assets/firat.png"),
+    azra:   loadImg("assets/azra.png"),
+    enemy:  loadImg("assets/enemy.png"),
+    turtle: loadImg("assets/turtle.png"),
+    heart:  loadImg("assets/heart.png"),
+    flag:   loadImg("assets/flag.png"),
+    castle: loadImg("assets/castle.png"),
+    flower: loadImg("assets/fireflower.png"),
+    fire:   loadImg("assets/fireball.png"),
+    lava:   loadImg("assets/lava.png"),
+  };
+  const sfx = {
+    start: loadAudio("assets/sfx/start.wav"),
+    jump:  loadAudio("assets/sfx/jump.wav"),
+    heart: loadAudio("assets/sfx/heart.wav"),
+    stomp: loadAudio("assets/sfx/stomp.wav"),
+    fire:  loadAudio("assets/sfx/fire.wav"),
+  };
+  let muted = false;
+  function loadAudio(src){
+    const a = new Audio(src);
+    a.preload = "auto";
+    return a;
+  }
+  function playSfx(a){
+    if (muted) return;
+    try{ a.currentTime = 0; a.play(); }catch(e){}
+  }
+
+  // Title screen
+  let gameState = "title"; // "title" | "playing"
+  let trans = { active:false, t:0 }; // cloud wipe
+
+  const titleUI = document.getElementById("titleUI");
+  const startBtn = document.getElementById("startBtn");
+  const howBtn = document.getElementById("howBtn");
+  const muteBtn = document.getElementById("muteBtn");
+  const howBox = document.getElementById("howBox");
+
+  howBtn.addEventListener("click", () => {
+    howBox.style.display = (howBox.style.display === "none") ? "block" : "none";
+  });
+
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? "SOUND: OFF" : "SOUND: ON";
+  });
+
+  startBtn.addEventListener("click", () => {
+    if (gameState !== "title") return;
+    playSfx(sfx.start);
+    titleUI.style.display = "none";
+    trans.active = true; trans.t = 0;
+    // start fresh
+    buildLevel1();
+    restart(true);
+    gameState = "playing";
+  });
+
+  function loadImg(src){ const img = new Image(); img.src = src; return img; }
+  Promise.all(Object.values(assets).map(img => new Promise(res => img.onload = res))).then(() => { renderTitleFrame(); requestAnimationFrame(loop); });
+
+  const keys = new Set();
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    if (["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) e.preventDefault();
+    keys.add(k);
+    if (k === "r") restart(true);
+  }, { passive:false });
+  window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+  const down = (...arr) => arr.some(k => keys.has(k));
+
+  const TILE = 16;
+  const SPEED_SCALE = 0.8;
+
+  const GRAV = 1700;
+  const WALK_ACC = 900 * SPEED_SCALE;
+  const RUN_ACC  = 1300 * SPEED_SCALE;
+  const WALK_MAX = 110 * SPEED_SCALE;
+  const RUN_MAX  = 165 * SPEED_SCALE;
+  const FRICTION = 1200;
+
+  const JUMP = 520;
+  const COYOTE = 0.09, JBUF = 0.12;
+
+  const FIRE_COOLDOWN = 0.28;
+  const FIRE_SPEED = 240;
+
+  const LOVE_MESSAGE = "Seni her koşulda bulurum ❤️\nSevgililer Günümüz kutlu olsun, Azra.\n— Fırat";
+  const ATLAS = { 1:[0,0], 2:[1,0], 3:[2,0], 4:[3,0], 5:[4,0] };
+
+  let level = 1;
+  let transitioning = false;
+  let transT = 0;
+
+  let MAP_W = 260, MAP_H = 18;
+  let map = [];
+  let hazards = [];
+  let hearts = [];
+  let qBlocks = [];
+  let flowers = [];
+  let enemies = [];
+  let fireballs = [];
+  const cam = { x: 0, y: 0 };
+
+  let flagPole = { x: 224*TILE + 8, y: 0, h: 64 };
+  let castle = { x: 0, y: 0, w: 96, h: 80 };
+  let azra = { x: 0, y: 0, w: 12, h: 18 };
+
+  const player = {
+    x: 2*TILE, y: 9*TILE,
+    w: 10, h: 14,
+    vx: 0, vy: 0,
+    onG: false,
+    coyote: 0,
+    jbuf: 0,
+    hearts: 0,
+    win: false,
+    anim: 0,
+    face: 1,
+    fire: false,
+    fireCd: 0,
+    stuckT: 0,
+    lastX: 0,
+    lastY: 0,
+  };
+
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  const aabb = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+
+  function solidAt(tx, ty){
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+    return map[ty][tx] !== 0;
+  }
+  function firstSolidYAtTx(tx){
+    for (let ty=0; ty<MAP_H; ty++){
+      if (map[ty][tx] !== 0) return ty;
+    }
+    return MAP_H-1;
+  }
+  function groundAtPixelX(px){
+    const tx = Math.floor(px / TILE);
+    const ty = firstSolidYAtTx(tx);
+    return ty*TILE;
+  }
+  function safePickupY(px){
+    const tx = Math.floor(px / TILE);
+    const ty = firstSolidYAtTx(tx);
+    return ty*TILE - 8;
+  }
+
+  function resetWorldArrays(){
+    map = Array.from({length: MAP_H}, () => Array(MAP_W).fill(0));
+    hazards = [];
+    hearts = [];
+    qBlocks = [];
+    flowers = [];
+    enemies = [];
+    fireballs = [];
+  }
+
+  function buildLevel1(){
+    level = 1;
+    MAP_W = 260; MAP_H = 18;
+    resetWorldArrays();
+
+    let groundY = 11;
+    for (let x=0; x<MAP_W; x++){
+      if (x % 30 === 0 && x > 12) groundY += (Math.random() < 0.5 ? 1 : -1);
+      groundY = Math.max(10, Math.min(12, groundY));
+
+      const gap = (x===36 || x===37 || x===84 || x===85 || x===132 || x===133 || x===176 || x===177);
+      for (let y=groundY; y<MAP_H; y++){
+        if (gap) continue;
+        map[y][x] = (y === groundY) ? 1 : 2;
+      }
+    }
+
+    const plats = [
+      {x: 16, y: 8, w: 6},
+      {x: 40, y: 7, w: 5},
+      {x: 52, y: 6, w: 6},
+      {x: 70, y: 9, w: 4},
+      {x: 90, y: 7, w: 6},
+      {x: 106,y: 6, w: 6},
+      {x: 126,y: 7, w: 7},
+      {x: 148,y: 6, w: 6},
+      {x: 178,y: 7, w: 7},
+      {x: 202,y: 6, w: 8},
+    ];
+    for (const p of plats){
+      for (let i=0;i<p.w;i++) map[p.y][p.x+i] = 3;
+    }
+
+    for (let i=0;i<7;i++) map[7][58+i] = 4;
+    map[8][32] = 5;
+    map[8][98] = 5;
+    qBlocks = [{ tx: 32, ty: 8, hit:false }, { tx: 98, ty: 8, hit:false }];
+
+    for (let i=0;i<6;i++) map[9][29+i] = 4; // brick ledge under first question block
+    for (let i=0;i<5;i++) map[9][96+i] = 4; // brick ledge under second question block
+
+    const sx = 220;
+    for (let i=0;i<7;i++){
+      for (let h=0; h<=i; h++){
+        map[12-h][sx+i] = 3;
+      }
+    }
+
+    for (let x=216; x<MAP_W; x++){
+      for (let y=11; y<MAP_H; y++){
+        map[y][x] = (y===11) ? 1 : 2;
+      }
+    }
+
+    flagPole.x = 232*TILE + 8;
+    flagPole.h = 64;
+    flagPole.y = groundAtPixelX(flagPole.x) - flagPole.h;
+
+    const heartXs = [18,42,56,88,102,124,146,174,196,226].map(t=>t*TILE+8);
+    hearts = heartXs.map(x => ({ x, y: safePickupY(x), taken:false }));
+
+    const enemiesInit = [
+      {type:"goomba", x: 26*TILE,  w: 12, h: 12, vx: 35*SPEED_SCALE},
+      {type:"goomba", x: 74*TILE,  w: 12, h: 12, vx: 35*SPEED_SCALE},
+      {type:"turtle", x: 116*TILE, w: 14, h: 14, vx: 38*SPEED_SCALE},
+      {type:"goomba", x: 164*TILE, w: 12, h: 12, vx: 45*SPEED_SCALE},
+      {type:"goomba", x: 190*TILE, w: 12, h: 12, vx: 55*SPEED_SCALE},
+    ];
+    enemies = enemiesInit.map(e => ({...e, y:0, vy:0, alive:true, state:"walk", shellVx:0 }));
+    for (const e of enemies){
+      e.y = groundAtPixelX(e.x) - e.h;
+    }
+
+    castle.x = 99999; castle.y = 99999;
+    azra.x = 99999; azra.y = 99999;
+
+    statusEl.textContent = "Chapter 1: Gökyüzü Tepeleri — Amaç: Bayrağa ulaş.";
+  }
+
+  function buildLevel2(){
+    level = 2;
+    MAP_W = 280; MAP_H = 18;
+    resetWorldArrays();
+
+    // ground
+    for (let x=0; x<MAP_W; x++){
+      const isPit = (x>=26 && x<=32) || (x>=78 && x<=84) || (x>=136 && x<=142) || (x>=202 && x<=208);
+      if (!isPit){
+        map[11][x] = 1;
+        map[12][x] = 2;
+        map[13][x] = 2;
+      }
+    }
+
+    // lava hazards (aligned to jump)
+    const pits = [
+      {a: 26, b: 32},
+      {a: 78, b: 84},
+      {a: 136,b: 142},
+      {a: 202,b: 208},
+    ];
+    for (const p of pits){
+      hazards.push({x: p.a*TILE, y: 12*TILE, w: (p.b-p.a+1)*TILE, h: 6*TILE, type:"lava"});
+    }
+
+    // stepping platforms above lava (lower and closer)
+    const plats = [
+      {x: 27, y: 9, w: 6},
+      {x: 44, y: 9, w: 6},
+
+      {x: 79, y: 9, w: 6},
+      {x: 96, y: 8, w: 7},
+
+      {x: 137,y: 9, w: 6},
+      {x: 154,y: 8, w: 7},
+
+      {x: 203,y: 9, w: 6},
+      {x: 220,y: 8, w: 7},
+    ];
+    for (const p of plats){
+      for (let i=0;i<p.w;i++) map[p.y][p.x+i] = 3;
+    }
+
+    // a reachable question block early in chapter 2 (gives fire flower)
+    map[8][50] = 5;
+    qBlocks = [{ tx: 50, ty: 8, hit:false }];
+
+    // enemies
+    for (const x of [18, 40, 60, 92, 112, 160, 176, 232, 244]){
+      enemies.push({ type:"goomba", x:x*TILE, y: 10*TILE, w: 12, h: 12, vx: -30, vy: 0, alive:true, shell:false, shellVx:0 });
+    }
+    // turtles (shell mechanics)
+    for (const x of [70, 128, 190]){
+      enemies.push({ type:"turtle", x:x*TILE, y: 10*TILE, w: 12, h: 12, vx: -24, vy: 0, alive:true, shell:false, shellVx:0 });
+    }
+
+    // end: castle + Azra princess on ground
+    flagPole = { x: 256*TILE + 8, y: 5*TILE, h: 96 };
+    castle = { x: 266*TILE, y: 7*TILE, w: 96, h: 80 };
+    azra = { x: 266*TILE + 54, y: 9*TILE + 6, w: 12, h: 18 };
+  }
+
+  function restart(fullReset){
+    transitioning = false;
+    transT = 0;
+    player.win = false;
+
+    if (fullReset){
+      player.hearts = 0;
+      player.fire = false;
+      buildLevel1();
+      level = 1;
+    }
+
+    player.x = 2*TILE; player.y = 9*TILE;
+    player.vx = 0; player.vy = 0;
+    player.onG = false;
+    player.coyote = 0;
+    player.jbuf = 0;
+    player.anim = 0;
+    player.face = 1;
+    player.fireCd = 0;
+    player.stuckT = 0;
+    player.lastX = player.x;
+    player.lastY = player.y;
+
+    fireballs = [];
+  }
+
+  function bumpQuestionBlock(tx, ty){
+    const qb = qBlocks.find(b => b.tx===tx && b.ty===ty);
+    if (!qb || qb.hit) return;
+    qb.hit = true;
+    map[ty][tx] = 4;
+
+    const fx = tx*TILE + 8;
+    const fy = (ty-1)*TILE - 8;
+    flowers.push({ x: fx, y: fy, taken:false, vy: -60, riseT: 0.35 });
+    statusEl.textContent = "Çiçek çıktı! Al ve X ile ateş et 🔥";
+  }
+
+  function moveAndCollide(ent, dt){
+    ent.x += ent.vx * dt;
+    let left = Math.floor(ent.x / TILE);
+    let right = Math.floor((ent.x + ent.w - 1) / TILE);
+    let top = Math.floor(ent.y / TILE);
+    let bottom = Math.floor((ent.y + ent.h - 1) / TILE);
+
+    if (ent.vx > 0){
+      for (let ty=top; ty<=bottom; ty++){
+        if (solidAt(right, ty)){
+          ent.x = right*TILE - ent.w - 0.01;
+          ent.vx = 0;
+          break;
+        }
+      }
+    } else if (ent.vx < 0){
+      for (let ty=top; ty<=bottom; ty++){
+        if (solidAt(left, ty)){
+          ent.x = (left+1)*TILE + 0.01;
+          ent.vx = 0;
+          break;
+        }
+      }
+    }
+
+    ent.y += ent.vy * dt;
+    left = Math.floor(ent.x / TILE);
+    right = Math.floor((ent.x + ent.w - 1) / TILE);
+    top = Math.floor(ent.y / TILE);
+    bottom = Math.floor((ent.y + ent.h) / TILE);
+
+    let onGround = false;
+    if (ent.vy > 0){
+      for (let tx=left; tx<=right; tx++){
+        if (solidAt(tx, bottom)){
+          ent.y = bottom*TILE - ent.h - 0.01;
+          ent.vy = 0;
+          onGround = true;
+          break;
+        }
+      }
+    } else if (ent.vy < 0){
+      for (let tx=left; tx<=right; tx++){
+        if (solidAt(tx, top)){
+          const tile = (map[top] && typeof map[top][tx] !== 'undefined') ? map[top][tx] : 0;
+          if (ent === player && tile === 5) bumpQuestionBlock(tx, top);
+          ent.y = (top+1)*TILE + 0.01;
+          ent.vy = 0;
+          break;
+        }
+      }
+    }
+    return onGround;
+  }
+
+  function isInsideSolid(ent){
+    const left = Math.floor(ent.x / TILE);
+    const right = Math.floor((ent.x + ent.w - 1) / TILE);
+    const top = Math.floor(ent.y / TILE);
+    const bottom = Math.floor((ent.y + ent.h - 1) / TILE);
+    for (let ty=top; ty<=bottom; ty++){
+      for (let tx=left; tx<=right; tx++){
+        if (solidAt(tx, ty)) return true;
+      }
+    }
+    return false;
+  }
+
+  function resolveInside(ent){
+    if (!isInsideSolid(ent)) return true;
+    for (let i=0;i<24;i++){
+      ent.y -= 1;
+      if (!isInsideSolid(ent)) return true;
+    }
+    return false;
+  }
+
+  function respawn(msg){
+    player.vx = 0; player.vy = 0;
+    player.onG = false;
+    player.coyote = 0;
+    player.jbuf = 0;
+    player.fireCd = 0;
+    player.stuckT = 0;
+    player.x = 2*TILE; player.y = 9*TILE;
+    statusEl.textContent = msg || (level === 1 ? "Chapter 1: Gökyüzü Tepeleri — Amaç: Bayrağa ulaş." : "Chapter 2: Magma Mağarası — Amaç: Azra’yı kurtar!");
+  }
+
+  function startTransitionToLevel2(){
+    transitioning = true;
+    transT = 0;
+    statusEl.textContent = "Checkpoint! Chapter 2’ye geçiliyor…";
+  }
+
+  let last = performance.now();
+  function start(){ /* deprecated */ }
+
+  function loop(t){
+    const dt = Math.min(0.033, (t-last)/1000);
+    last = t;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt){
+    if (gameState === "title"){
+      // idle title animation
+      return;
+    }
+
+    if (transitioning){
+      transT += dt;
+      player.vx = 0;
+      player.vy = Math.min(player.vy + GRAV*dt, 420);
+      player.onG = moveAndCollide(player, dt);
+
+      if (transT > 1.1){
+        buildLevel2();
+        transitioning = false;
+        player.x = 2*TILE; player.y = 9*TILE;
+        player.vx = 0; player.vy = 0;
+      }
+      cam.x = clamp(player.x - PW/2, 0, MAP_W*TILE - PW);
+      cam.y = clamp(player.y - PH/2, 0, MAP_H*TILE - PH);
+      return;
+    }
+
+    if (player.win) return;
+
+    const L = down("arrowleft","a");
+    const R = down("arrowright","d");
+    const J = down("arrowup","w"," ");
+    const RUN = down("shift");
+    const FIRE = down("x");
+
+    if (J) player.jbuf = JBUF; else player.jbuf = Math.max(0, player.jbuf - dt);
+
+    const ACC = RUN ? RUN_ACC : WALK_ACC;
+    const MAX = RUN ? RUN_MAX : WALK_MAX;
+
+    if (L && !R){ player.vx -= ACC*dt; player.face = -1; }
+    if (R && !L){ player.vx += ACC*dt; player.face =  1; }
+    if (!L && !R){
+      if (player.vx > 0) player.vx = Math.max(0, player.vx - FRICTION*dt);
+      if (player.vx < 0) player.vx = Math.min(0, player.vx + FRICTION*dt);
+    }
+    player.vx = clamp(player.vx, -MAX, MAX);
+
+    player.vy += GRAV*dt;
+
+    if (player.onG) player.coyote = COYOTE; else player.coyote = Math.max(0, player.coyote - dt);
+
+    if (player.jbuf > 0 && player.coyote > 0){
+      player.vy = -JUMP;
+      playSfx(sfx.jump);
+      player.onG = false;
+      player.coyote = 0;
+      player.jbuf = 0;
+    }
+
+    player.onG = moveAndCollide(player, dt);
+    if (!resolveInside(player)) { respawn("Takıldın 😄 Baştan."); return; }
+
+    for (const f of flowers){
+      if (f.taken) continue;
+      if (f.riseT > 0){
+        f.y += f.vy * dt;
+        f.riseT -= dt;
+      }
+    }
+
+    if (player.y > MAP_H*TILE + 120 || player.y < -120 || player.x < -120 || player.x > MAP_W*TILE + 120) { respawn("Baştan."); return; }
+
+    const pbox = {x: player.x, y: player.y, w: player.w, h: player.h};
+    for (const hz of hazards){
+      if (aabb(pbox, hz)){
+        respawn("Yandın 🔥 Baştan.");
+        break;
+      }
+    }
+
+    const dx = Math.abs(player.x - player.lastX);
+    const dy = Math.abs(player.y - player.lastY);
+
+    // Soft-lock detector: only trigger if player is TRYING to move/jump but position doesn't change.
+    const tryingToMove = (L||R||J);
+
+    if (dx < 0.05 && dy < 0.05 && tryingToMove){
+      player.stuckT += dt;
+      if (player.stuckT > 1.0) { respawn("Takıldın 😄 Baştan."); return; }
+    } else {
+      player.stuckT = 0;
+      player.lastX = player.x;
+      player.lastY = player.y;
+    }
+
+    player.fireCd = Math.max(0, player.fireCd - dt);
+    if (player.fire && FIRE && player.fireCd === 0){
+      player.fireCd = FIRE_COOLDOWN;
+      const dir = player.face >= 0 ? 1 : -1;
+      fireballs.push({ x: player.x + (dir>0 ? player.w+2 : -6), y: player.y + 6, w: 6, h: 6, vx: dir * FIRE_SPEED, life: 1.6 });
+      playSfx(sfx.fire);
+    }
+
+    for (const b of fireballs){ b.x += b.vx * dt; b.life -= dt; }
+    fireballs = fireballs.filter(b => b.life > 0);
+
+    for (const e of enemies){
+      if (!e.alive) continue;
+
+      if (e.type === "turtle" && e.state === "shellMove"){
+        e.vx = e.shellVx;
+        e.vy += GRAV*dt;
+        const preVx = e.vx;
+        moveAndCollide(e, dt);
+        if (!resolveInside(e)) { e.alive = false; continue; }
+        if (preVx !== 0 && e.vx === 0) e.shellVx *= -1;
+        for (const o of enemies){
+          if (!o.alive || o === e) continue;
+          if (aabb(e, o)) o.alive = false;
+        }
+        continue;
+      }
+
+      if (e.type === "turtle" && e.state === "shell"){
+        e.vx = 0;
+      } else {
+        const dir = Math.sign(e.vx) || 1;
+        const aheadX = (e.x + (dir>0 ? e.w+1 : -1));
+        const txAhead = Math.floor(aheadX / TILE);
+        const tyFoot = Math.floor((e.y + e.h + 1) / TILE);
+        if (!solidAt(txAhead, tyFoot)) e.vx *= -1;
+        if (e.vx === 0) e.vx = 35*SPEED_SCALE * dir;
+      }
+
+      e.vy += GRAV*dt;
+      const wasVx = e.vx;
+      moveAndCollide(e, dt);
+      if (!resolveInside(e)) { e.alive = false; continue; }
+      if (wasVx !== 0 && e.vx === 0) e.vx = -wasVx;
+    }
+
+    for (const h of hearts){
+      if (h.taken) continue;
+      if (aabb(pbox, {x: h.x-6, y: h.y-6, w:12, h:12})){ h.taken = true; player.hearts++; playSfx(sfx.heart); }
+    }
+    for (const f of flowers){
+      if (f.taken) continue;
+      if (aabb(pbox, {x: f.x-8, y: f.y-8, w:16, h:16})){ f.taken = true; player.fire = true; statusEl.textContent = "Ateş gücü geldi! X ile ateş et 🔥"; }
+    }
+
+    for (const b of fireballs){
+      const bb = {x:b.x, y:b.y, w:b.w, h:b.h};
+      for (const e of enemies){
+        if (!e.alive) continue;
+        if (aabb(bb, e)){
+          if (e.type === "turtle"){ e.state = "shell"; e.shellVx = 0; e.vx = 0; }
+          else e.alive = false;
+          b.life = 0;
+        }
+      }
+    }
+    fireballs = fireballs.filter(b => b.life > 0);
+
+    for (const e of enemies){
+      if (!e.alive) continue;
+      if (!aabb(pbox, e)) continue;
+
+      const fromAbove = (player.vy > 0) && ((player.y + player.h) - (player.vy*dt) <= e.y + 2);
+
+      if (fromAbove){
+        player.vy = -JUMP * 0.55;
+        playSfx(sfx.stomp);
+        if (e.type === "turtle"){
+          if (e.state === "walk"){ e.state = "shell"; e.vx = 0; e.shellVx = 0; }
+          else if (e.state === "shellMove"){ e.state = "shell"; e.shellVx = 0; }
+          else { e.state = "shellMove"; e.shellVx = (player.face>=0 ? 1 : -1) * 240 * SPEED_SCALE; }
+        } else e.alive = false;
+      } else {
+        if (e.type === "turtle" && e.state === "shell"){ e.state = "shellMove"; e.shellVx = (player.x < e.x ? -1 : 1) * 240 * SPEED_SCALE; }
+        else { respawn("Ah! Canavar çarptı 😄 Baştan."); break; }
+      }
+    }
+
+    if (level === 1){
+      const fp = {x: flagPole.x-6, y: flagPole.y, w: 12, h: flagPole.h};
+      if (aabb(pbox, fp)) startTransitionToLevel2();
+      else statusEl.textContent = `Chapter 1: Gökyüzü Tepeleri — Kalp: ${player.hearts}/10 ${player.fire ? " • FIRE" : ""}`;
+    } else {
+      if (aabb(pbox, azra)){ player.win = true; statusEl.textContent = "Başardın! Azra kurtarıldı ❤️"; }
+      else statusEl.textContent = `Chapter 2: Magma Mağarası — Kalp: ${player.hearts}/10 ${player.fire ? " • FIRE" : ""}`;
+    }
+
+    cam.x = clamp(player.x - PW/2, 0, MAP_W*TILE - PW);
+    cam.y = clamp(player.y - PH/2, 0, MAP_H*TILE - PH);
+
+    player.anim += dt * (Math.abs(player.vx) > 10 ? (RUN ? 15 : 10) : 6);
+  }
+
+  function render(){
+    if (gameState === "title"){
+      renderTitleFrame();
+      return;
+    }
+
+    if (level === 1){
+      const g = pctx.createLinearGradient(0,0,0,PH);
+      g.addColorStop(0, "#93dbff");
+      g.addColorStop(1, "#4aa9ff");
+      pctx.fillStyle = g;
+      pctx.fillRect(0,0,PW,PH);
+      drawSun(270, 26, 10);
+      drawAlpsSky();
+    } else {
+      const g = pctx.createLinearGradient(0,0,0,PH);
+      g.addColorStop(0, "#3b0a14");
+      g.addColorStop(1, "#12060a");
+      pctx.fillStyle = g;
+      pctx.fillRect(0,0,PW,PH);
+      drawMagmaGlow();
+    }
+
+    const startX = Math.floor(cam.x / TILE);
+    const endX   = Math.ceil((cam.x + PW) / TILE);
+    const startY = Math.floor(cam.y / TILE);
+    const endY   = Math.ceil((cam.y + PH) / TILE);
+
+    for (let y=startY; y<endY; y++){
+      for (let x=startX; x<endX; x++){
+        const t = map[y]?.[x] ?? 0;
+        if (!t) continue;
+        drawTile(t, x*TILE - cam.x, y*TILE - cam.y);
+      }
+    }
+
+    const lavaFrame = (Math.floor(performance.now()/180) % 2);
+    for (const hz of hazards){
+      const sx = Math.floor(hz.x - cam.x);
+      const sy = Math.floor(hz.y - cam.y);
+      const cols = Math.ceil(hz.w / TILE);
+      const rows = Math.ceil(hz.h / TILE);
+      for (let yy=0; yy<rows; yy++){
+        for (let xx=0; xx<cols; xx++){
+          pctx.drawImage(assets.lava, lavaFrame*TILE, 0, TILE, TILE, sx + xx*TILE, sy + yy*TILE, TILE, TILE);
+        }
+      }
+    }
+
+    if (level === 1){
+      pctx.drawImage(assets.flag, Math.floor(flagPole.x - cam.x - 10), Math.floor(flagPole.y - cam.y));
+    } else {
+      pctx.drawImage(assets.castle, Math.floor(castle.x - cam.x), Math.floor(castle.y - cam.y));
+      const azFrame = (Math.floor(performance.now()/500) % 2);
+      drawSprite(assets.azra, azFrame, 24, 24, Math.floor(azra.x - cam.x - 6), Math.floor(azra.y - cam.y - 6));
+    }
+
+    const heartFrame = (Math.floor(performance.now()/180) % 2);
+    for (const h of hearts){
+      if (h.taken) continue;
+      drawSprite(assets.heart, heartFrame, 16, 16, Math.floor(h.x - cam.x - 8), Math.floor(h.y - cam.y - 8));
+    }
+
+    const flFrame = (Math.floor(performance.now()/220) % 2);
+    for (const f of flowers){
+      if (f.taken) continue;
+      drawSprite(assets.flower, flFrame, 16, 16, Math.floor(f.x - cam.x - 8), Math.floor(f.y - cam.y - 8));
+    }
+
+    const eFrame = (Math.floor(performance.now()/220) % 2);
+    for (const e of enemies){
+      if (!e.alive) continue;
+      if (e.type === "turtle"){
+        if (e.state === "shell" || e.state === "shellMove"){
+          drawSprite(assets.turtle, 0, 16, 16, Math.floor(e.x - cam.x), Math.floor(e.y - cam.y + 2));
+        } else drawSprite(assets.turtle, eFrame, 16, 16, Math.floor(e.x - cam.x), Math.floor(e.y - cam.y));
+      } else drawSprite(assets.enemy, eFrame, 16, 16, Math.floor(e.x - cam.x), Math.floor(e.y - cam.y));
+    }
+
+    const fbFrame = (Math.floor(performance.now()/120) % 2);
+    for (const b of fireballs){
+      drawSprite(assets.fire, fbFrame, 8, 8, Math.floor(b.x - cam.x), Math.floor(b.y - cam.y));
+    }
+
+    const RUN = down("shift");
+    const pFrame = player.win ? 5 : (!player.onG ? (player.vy < 0 ? 3 : 4) : (Math.abs(player.vx)>10 ? (Math.floor(player.anim)%2)+1 : 0));
+    drawPlayer(assets.firat, pFrame, 24, 24, Math.floor(player.x - cam.x - 7), Math.floor(player.y - cam.y - 10), player.face);
+
+    drawHUD(RUN);
+    if (player.win) drawWin();
+
+    if (transitioning){
+      const a = Math.min(0.65, transT * 0.7);
+      pctx.fillStyle = `rgba(0,0,0,${a})`;
+      pctx.fillRect(0,0,PW,PH);
+      pctx.fillStyle = "rgba(255,255,255,.9)";
+      pctx.font = "10px ui-monospace, Menlo, monospace";
+      pctx.fillText("CHAPTER 2", 124, 88);
+    }
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(pcan, 0,0,PW,PH, 0,0,PW*SCALE,PH*SCALE);
+  }
+
+  
+  function renderTitleFrame(){
+    // Background sky + alps
+    const g = pctx.createLinearGradient(0,0,0,PH);
+    g.addColorStop(0, "#93dbff");
+    g.addColorStop(1, "#4aa9ff");
+    pctx.fillStyle = g;
+    pctx.fillRect(0,0,PW,PH);
+    drawSun(270, 26, 10);
+    drawAlpsSky();
+
+    // ground strip
+    for (let x=0; x<PW; x+=TILE){
+      drawTile(1, x, 11*TILE);
+      drawTile(2, x, 12*TILE);
+      drawTile(2, x, 13*TILE);
+    }
+
+    // title text
+    pctx.fillStyle = "rgba(0,0,0,.35)";
+    pctx.fillRect(0,0,PW,32);
+    pctx.fillStyle = "rgba(255,255,255,.95)";
+    pctx.font = "14px ui-monospace, Menlo, monospace";
+    pctx.fillText("AZRA'YI KURTARMAK", 78, 20);
+    pctx.font = "9px ui-monospace, Menlo, monospace";
+    pctx.fillText("START'a bas — Fırat ❤️ Azra", 92, 30);
+
+    // little idle characters
+    drawPlayer(assets.firat, 0, 24, 24, 70, 11*TILE-20, 1);
+    const azFrame = (Math.floor(performance.now()/500) % 2);
+    drawSprite(assets.azra, azFrame, 24, 24, 220, 11*TILE-22);
+
+    // cloud wipe transition
+    if (trans.active){
+      trans.t += 0.016;
+      const p = Math.min(1, trans.t / 0.6);
+      drawCloudWipe(p);
+      if (p >= 1) trans.active = false;
+    }
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(pcan, 0,0,PW,PH, 0,0,PW*SCALE,PH*SCALE);
+  }
+
+  function drawCloudWipe(p){
+    // simple pixel clouds sliding outward
+    const cx = PW/2;
+    const w = PW * (1-p);
+    pctx.fillStyle = "rgba(255,255,255,.92)";
+    for (let i=0;i<7;i++){
+      const y = 20 + i*22;
+      const amp = 10 + (i%3)*6;
+      for (let x=0; x<PW; x+=6){
+        const wave = Math.sin((x*0.08)+(i*0.9)) * amp;
+        const leftEdge = cx - w/2 + wave*0.15;
+        const rightEdge = cx + w/2 + wave*0.15;
+        if (x < leftEdge || x > rightEdge){
+          pctx.fillRect(x, y, 6, 10);
+        }
+      }
+    }
+  }
+function drawSun(cx, cy, r){
+    pctx.fillStyle = "rgba(255, 240, 150, 0.95)";
+    for (let y=-r; y<=r; y++){
+      for (let x=-r; x<=r; x++){
+        if (x*x + y*y <= r*r) pctx.fillRect(cx + x, cy + y, 1, 1);
+      }
+    }
+    pctx.fillStyle = "rgba(255, 240, 150, 0.35)";
+    for (const [dx,dy] of [[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]]){
+      for (let i= r+2; i< r+7; i++) pctx.fillRect(cx + dx*i, cy + dy*i, 1, 1);
+    }
+  }
+  function drawAlpsSky(){
+    const horizon = 112;
+    const px = -cam.x * 0.12;
+    drawMountainLayer(px, horizon, 0.30);
+    drawMountainLayer(px*0.7, horizon+10, 0.22);
+    pctx.fillStyle = "rgba(110, 190, 255, .25)";
+    pctx.fillRect(0, horizon+18, PW, 20);
+  }
+  function drawMountainLayer(offsetX, baseY, alpha){
+    const peaks = [
+      {x: 0,   w: 92, h: 78},
+      {x: 62,  w: 78, h: 60},
+      {x: 130, w: 98, h: 82},
+      {x: 210, w: 84, h: 66},
+      {x: 285, w: 96, h: 80},
+    ];
+    for (let rep=-1; rep<2; rep++){
+      for (const p of peaks){
+        const x0 = (p.x + rep*PW) + (offsetX % PW);
+        drawMountain(x0, baseY, p.w, p.h, alpha);
+      }
+    }
+  }
+  function drawMountain(x, baseY, w, h, alpha){
+    pctx.fillStyle = `rgba(32, 150, 95, ${alpha})`;
+    pctx.beginPath();
+    pctx.moveTo(x, baseY);
+    pctx.lineTo(x + w*0.5, baseY - h);
+    pctx.lineTo(x + w, baseY);
+    pctx.closePath();
+    pctx.fill();
+
+    pctx.fillStyle = `rgba(18, 110, 72, ${alpha})`;
+    pctx.beginPath();
+    pctx.moveTo(x + w*0.5, baseY - h);
+    pctx.lineTo(x + w, baseY);
+    pctx.lineTo(x + w*0.62, baseY);
+    pctx.closePath();
+    pctx.fill();
+
+    pctx.fillStyle = `rgba(245, 245, 245, ${alpha})`;
+    pctx.beginPath();
+    pctx.moveTo(x + w*0.42, baseY - h*0.72);
+    pctx.lineTo(x + w*0.5, baseY - h);
+    pctx.lineTo(x + w*0.58, baseY - h*0.72);
+    pctx.lineTo(x + w*0.52, baseY - h*0.62);
+    pctx.lineTo(x + w*0.48, baseY - h*0.62);
+    pctx.closePath();
+    pctx.fill();
+  }
+  function drawMagmaGlow(){
+    pctx.fillStyle = "rgba(0,0,0,.35)";
+    for (let i=0;i<6;i++){
+      const x = ((-cam.x*0.08) + i*64) % (PW+64) - 64;
+      pctx.beginPath();
+      pctx.moveTo(x, 130);
+      pctx.bezierCurveTo(x+20, 110, x+40, 110, x+64, 130);
+      pctx.lineTo(x+64, PH);
+      pctx.lineTo(x, PH);
+      pctx.closePath();
+      pctx.fill();
+    }
+    const g = pctx.createLinearGradient(0, PH, 0, 110);
+    g.addColorStop(0, "rgba(255,90,30,.45)");
+    g.addColorStop(1, "rgba(255,90,30,0)");
+    pctx.fillStyle = g;
+    pctx.fillRect(0,110,PW,PH-110);
+  }
+
+  function drawTile(tileId, x, y){
+    const uv = ATLAS[tileId];
+    if (!uv) return;
+    const [tx,ty] = uv;
+    pctx.drawImage(assets.tiles, tx*TILE, ty*TILE, TILE, TILE, Math.floor(x), Math.floor(y), TILE, TILE);
+  }
+  function drawSprite(img, frame, fw, fh, x, y){ pctx.drawImage(img, frame*fw, 0, fw, fh, x, y, fw, fh); }
+  function drawPlayer(img, frame, fw, fh, x, y, face){
+    pctx.save();
+    if (face < 0){
+      pctx.translate(x+fw, y);
+      pctx.scale(-1, 1);
+      pctx.drawImage(img, frame*fw, 0, fw, fh, 0, 0, fw, fh);
+    } else pctx.drawImage(img, frame*fw, 0, fw, fh, x, y, fw, fh);
+    pctx.restore();
+    if (player.fire){
+      pctx.fillStyle = "rgba(255, 220, 120, .9)";
+      pctx.fillRect(x+2, y+2, 2, 2);
+    }
+  }
+  function drawHUD(isRun){
+    pctx.save();
+    pctx.fillStyle = "rgba(0,0,0,.40)";
+    pctx.fillRect(0,0,PW,18);
+    pctx.fillStyle = "rgba(255,255,255,.95)";
+    pctx.font = "8px ui-monospace, Menlo, monospace";
+    const tag = level === 1 ? "CH1" : "CH2";
+    pctx.fillText(`${tag}  FIRAT  KALP: ${player.hearts}/10  ${isRun ? "RUN" : "WALK"}  ${player.fire ? "FIRE" : ""}`, 8, 12);
+    drawSprite(assets.heart, 0, 16, 16, 70, 1);
+    pctx.restore();
+  }
+  function drawWin(){
+    pctx.save();
+    pctx.fillStyle = "rgba(0,0,0,.65)";
+    pctx.fillRect(0,0,PW,PH);
+    const cw=250, ch=90, cx=(PW-cw)/2, cy=(PH-ch)/2;
+    pctx.fillStyle = "rgba(255,255,255,.10)";
+    pctx.fillRect(cx, cy, cw, ch);
+    pctx.strokeStyle = "rgba(255,255,255,.18)";
+    pctx.strokeRect(cx+0.5, cy+0.5, cw-1, ch-1);
+    pctx.fillStyle = "rgba(255,255,255,.95)";
+    pctx.font = "10px ui-monospace, Menlo, monospace";
+    pctx.fillText("GÖREV TAMAMLANDI ❤️", cx+12, cy+18);
+    pctx.fillStyle = "rgba(255,255,255,.88)";
+    pctx.font = "9px ui-monospace, Menlo, monospace";
+    wrapText(LOVE_MESSAGE, cx+12, cy+34, cw-24, 12);
+    pctx.fillStyle = "rgba(255,255,255,.70)";
+    pctx.font = "8px ui-monospace, Menlo, monospace";
+    pctx.fillText("R: Yeniden Başlat", cx+12, cy+ch-10);
+    pctx.restore();
+  }
+  function wrapText(text, x, y, maxW, lineH){
+    const lines = text.split("\n");
+    let yy = y;
+    for (const raw of lines){
+      const words = raw.split(" ");
+      let line = "";
+      for (let i=0;i<words.length;i++){
+        const test = line + words[i] + " ";
+        if (pctx.measureText(test).width > maxW && i>0){
+          pctx.fillText(line.trimEnd(), x, yy);
+          line = words[i] + " ";
+          yy += lineH;
+        } else line = test;
+      }
+      pctx.fillText(line.trimEnd(), x, yy);
+      yy += lineH;
+    }
+  }
+})();
+</script>
+</body>
+</html>
